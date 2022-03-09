@@ -84,25 +84,194 @@ select
 	when yearid >= '2000' and yearid <= '2009' then '2000-2009'
 	when yearid >= '2010' and yearid <= '2016' then '2010-2016'
 	else null end as decade,
-	avg(so) avg_ko,
-	avg(hr) avg_hr
-from batting
-group by decade
-order by avg_ko desc;
+	round((sum(so)/sum(g)),2) as avg_so_game,
+	round((sum(hr)/sum(g)),2) as avg_hr_game
+from teams
+group by decade, so, g
+order by avg_so_game desc;
+
+select *
+from teams;
 
 -- Both strikouts per game and home runs per game have been increasing since 1920
 
 /*6) Find the player who had the most success stealing bases in 2016, where success is measured as the percentage of stolen base attempts which are successful. (A stolen base attempt results either in a stolen base or being caught stealing.) Consider only players who attempted at least 20 stolen bases.*/
 
 select
-	playerid,
-	sb,
-	cs,
-	sum(sb+cs) as att_sb,
-	sb / (sb+cs) as sb_succ_rate
-from batting
+	p.namefirst,
+	p.namelast,
+	p.playerid,
+	b.cs,
+	sum(b.sb) as sb,
+	sum(b.sb + b.cs) as att_sb,
+	(sum(b.sb))/(nullif(sum(b.sb + b.cs),0))  as sb_succ_rate
+from people as p 
+join batting as b 
+on p.playerid = b.playerid
 where 
 	yearid = '2016'
-	and att_sb >= 20
-group by playerid, sb, cs
-order by sb_succ_rate desc;
+group by p.namefirst, p.namelast, p.playerid, b.sb, b.cs
+order by b.sb desc;
+
+--
+
+/*7) From 1970 – 2016, what is the largest number of wins for a team that did not win the world series? What is the smallest number of wins for a team that did win the world series? Doing this will probably result in an unusually small number of wins for a world series champion – determine why this is the case. Then redo your query, excluding the problem year. How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? What percentage of the time?*/
+
+select
+	t.yearid,
+	t.teamid,
+	t.franchid,
+	tf.franchname as team_name,
+	t.g,
+	t.w,
+	t.l,
+	t.wswin
+from teams as t
+join teamsfranchises as tf
+on t.franchid = tf.franchid
+where yearid >= '1970' and yearid <= '2016' and t.wswin like 'N'
+group by
+	t.yearid,
+	t.teamid,
+	t.franchid,
+	tf.franchname,
+	t.g,
+	t.w,
+	t.l,
+	t.wswin
+order by t.w desc;
+
+--116 wins in 2001 by the Seattle Mariners
+
+select
+	t.yearid,
+	t.teamid,
+	t.franchid,
+	tf.franchname as team_name,
+	t.g,
+	t.w,
+	t.l,
+	t.wswin
+from teams as t
+join teamsfranchises as tf
+on t.franchid = tf.franchid
+where yearid >= '1970' and yearid <= '2016' and t.wswin like 'Y'
+group by
+	t.yearid,
+	t.teamid,
+	t.franchid,
+	tf.franchname,
+	t.g,
+	t.w,
+	t.l,
+	t.wswin
+order by t.w asc;
+
+--63 wins by the Los Angeles Dodgers in 1981; this is because of a labor strike initiated by the players from June through July during the middle of the 1981 season.  When the strike ended, the league decided to split up the first and second halves of the season, since a little more than a third of that season's games had already been cancelled.
+
+select
+	t.yearid,
+	t.teamid,
+	t.franchid,
+	tf.franchname as team_name,
+	t.g,
+	t.w,
+	t.l,
+	t.wswin
+from teams as t
+join teamsfranchises as tf
+on t.franchid = tf.franchid
+where yearid >= '1970' and yearid <= '2016' and yearid <> '1981' and t.wswin like 'Y'
+group by
+	t.yearid,
+	t.teamid,
+	t.franchid,
+	tf.franchname,
+	t.g,
+	t.w,
+	t.l,
+	t.wswin
+order by t.w asc;
+
+--After excluding the 1981 season, 83 wins for the St. Louis Cardinals in 2006
+
+select
+
+--
+
+/*8) Using the attendance figures from the homegames table, find the teams and parks which had the top 5 average attendance per game in 2016 (where average attendance is defined as total attendance divided by number of games). Only consider parks where there were at least 10 games played. Report the park name, team name, and average attendance. Repeat for the lowest 5 average attendance.*/
+
+--Top 5
+select
+	h.team,
+	f.franchname,
+	h.park,
+	p.park_name,
+	h.games,
+	h.attendance,
+	round((h.attendance/h.games),2) as avg_attend_game
+from homegames as h
+inner join parks as p
+on h.park = p.park
+inner join teams as t
+on h.team = t.teamid
+inner join teamsfranchises as f
+on t.franchid = f.franchid
+where h.year = '2016' and h.games >= '10'
+group by
+	h.team,
+	f.franchname,
+	h.park,
+	p.park_name,
+	h.games,
+	h.attendance
+order by avg_attend_game desc
+limit 5;
+
+--Bottom 5
+select
+	h.team,
+	f.franchname,
+	h.park,
+	p.park_name,
+	h.games,
+	h.attendance,
+	round((h.attendance/h.games),2) as avg_attend_game
+from homegames as h
+inner join parks as p
+on h.park = p.park
+inner join teams as t
+on h.team = t.teamid
+inner join teamsfranchises as f
+on t.franchid = f.franchid
+where h.year = '2016' and h.games >= '10'
+group by
+	h.team,
+	f.franchname,
+	h.park,
+	p.park_name,
+	h.games,
+	h.attendance
+order by avg_attend_game asc
+limit 5;
+
+/*9) Which managers have won the TSN Manager of the Year award in both the National League (NL) and the American League (AL)? Give their full name and the teams that they were managing when they won the award.*/
+
+select
+	am.playerid,
+	p.namefirst,
+	p.namelast,
+	am.awardid,
+	am.yearid,
+	am.lgid
+from awardsmanagers as am
+inner join people as p
+on am.playerid = p.playerid
+where awardid like '%TSN%' and lgid not like '%M%'
+group by
+	am.playerid,
+	p.namefirst,
+	p.namelast,
+	am.awardid,
+	am.yearid,
+	am.lgid;
