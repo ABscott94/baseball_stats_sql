@@ -84,10 +84,10 @@ select
 	when yearid >= '2000' and yearid <= '2009' then '2000-2009'
 	when yearid >= '2010' and yearid <= '2016' then '2010-2016'
 	else null end as decade,
-	round((sum(so)/sum(g)),2) as avg_so_game,
-	round((sum(hr)/sum(g)),2) as avg_hr_game
+	avg(round((so / g),2)) as avg_so_game,
+	avg(round((hr / g),2)) as avg_hr_game
 from teams
-group by decade, so, g
+group by decade, so, hr, g
 order by avg_so_game desc;
 
 select *
@@ -102,18 +102,18 @@ select
 	p.namelast,
 	p.playerid,
 	b.cs,
-	sum(b.sb) as sb,
-	sum(b.sb + b.cs) as att_sb,
-	(sum(b.sb))/(nullif(sum(b.sb + b.cs),0))  as sb_succ_rate
+	b.sb,
+	b.sb + b.cs as att_sb,
+	CONCAT(ROUND(100.0 * b.sb/(b.sb+b.cs), 1), '%') as sb_succ_rate
 from people as p 
-join batting as b 
+left join batting as b 
 on p.playerid = b.playerid
 where 
-	yearid = '2016'
+	yearid = '2016' and b.sb+b.cs > 20
 group by p.namefirst, p.namelast, p.playerid, b.sb, b.cs
-order by b.sb desc;
+order by sb_succ_rate desc;
 
---
+-- Chris Owings 91.3%
 
 /*7) From 1970 – 2016, what is the largest number of wins for a team that did not win the world series? What is the smallest number of wins for a team that did win the world series? Doing this will probably result in an unusually small number of wins for a world series champion – determine why this is the case. Then redo your query, excluding the problem year. How often from 1970 – 2016 was it the case that a team with the most wins also won the world series? What percentage of the time?*/
 
@@ -195,7 +195,21 @@ order by t.w asc;
 
 --After excluding the 1981 season, 83 wins for the St. Louis Cardinals in 2006
 
-select
+Select 
+	t.name, 
+	t.yearid, 
+	t.w
+FROM teams as t
+JOIN (
+	SELECT Distinct yearid, 		
+	MAX(w) AS maxwins
+	FROM teams
+	GROUP BY yearid) teammaxwins
+ON t.w = teammaxwins.maxwins 
+AND t.yearid = teammaxwins.yearid
+WHERE t.yearid >= 1970 
+	AND t.yearid <= 2016 
+	AND t.wswin = 'Y'
 
 --
 
@@ -257,21 +271,28 @@ limit 5;
 
 /*9) Which managers have won the TSN Manager of the Year award in both the National League (NL) and the American League (AL)? Give their full name and the teams that they were managing when they won the award.*/
 
-select
-	am.playerid,
+with NL as (
+	select *
+	from awardsmanagers
+	where lgid = 'NL'),
+	AL as (
+	select *
+	from awardsmanagers
+	where lgid = 'AL')
+select 
+	NL.playerid,
 	p.namefirst,
 	p.namelast,
-	am.awardid,
-	am.yearid,
-	am.lgid
-from awardsmanagers as am
-inner join people as p
-on am.playerid = p.playerid
-where awardid like '%TSN%' and lgid not like '%M%'
-group by
-	am.playerid,
-	p.namefirst,
-	p.namelast,
-	am.awardid,
-	am.yearid,
-	am.lgid;
+	NL.lgid,
+	AL.lgid,
+	NL.yearid,
+	m.teamid
+from NL
+inner join AL
+on NL.playerid = AL.playerid
+left join people as p
+on NL.playerid = p.playerid
+left join managers as m
+on p.playerid = m.playerid and NL.yearid = m.yearid
+where NL.awardid ilike '%TSN Manager%'
+	and AL.awardid ilike '%TSN Manager%';
